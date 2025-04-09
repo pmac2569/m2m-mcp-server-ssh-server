@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "HackerNews": {
+      "command": "uvx",
+      "args": [
+        "mcp-hn"
+      ]
+    },
+    "major-league-baseball": {
+      "command": "uvx",
+      "args": [
+        "mcp_mlb_statsapi"
+      ]
+    },
+    "formula-one": {
+      "command": "uvx",
+      "args": [
+        "f1-mcp-server"
+      ]
+    }
+  }
+}

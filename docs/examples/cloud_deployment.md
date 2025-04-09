@@ -160,7 +160,7 @@ This document provides detailed instructions on how to set up the M2M MCP Server
 ### Basic Setup
 
 ```bash
-uv run m2m_mcp_server_ssh_server --host 0.0.0.0 --run-key-server --key-server-host 0.0.0.0
+uv run m2m-mcp-server-ssh-server --host 0.0.0.0 --run-key-server --key-server-host 0.0.0.0
 ```
 
 ### Using systemd for Service Management

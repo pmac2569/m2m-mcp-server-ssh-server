@@ -1,0 +1,1 @@
+include src/m2m_mcp_server_ssh_server/templates/*.html

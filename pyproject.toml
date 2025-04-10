@@ -1,6 +1,6 @@
 [project]
 name = "m2m-mcp-server-ssh-server"
-version = "0.1.1"
+version = "0.1.2"
 description = "M2M MCP Server SSH Server for accepting remote clients through a secure SSH channel."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -79,5 +79,13 @@ members = ["."]
 [tool.uv.sources]
 m2m-mcp-server-ssh-server = { workspace = true }
 
+[tool.hatch.build.targets.wheel]
+include = ["src/m2m_mcp_server_ssh_server/templates/*.html"]
+
 [tool.hatch.build.targets.sdist]
+include = ["src/m2m_mcp_server_ssh_server/templates/*.html"]
+
+# This ensures templates are included in the package
+[tool.hatch.build]
+packages = ["src/m2m_mcp_server_ssh_server"]
 include = ["src/m2m_mcp_server_ssh_server/templates/*.html"]

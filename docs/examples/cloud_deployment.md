@@ -41,9 +41,11 @@ This document provides detailed instructions on how to set up the M2M MCP Server
 |------|----------|------------|--------|---------|
 | SSH | TCP | 22 | Your IP address | Secure admin access |
 | Custom TCP | TCP | 8022 | Custom IP range or security group ID of clients | MCP SSH server access |
-| Custom TCP | TCP | 8000 | Custom IP range | Key server access |
-| HTTP | TCP | 80 | 0.0.0.0/0 | Health checks (if needed) |
-| HTTPS | TCP | 443 | 0.0.0.0/0 | SSL connections (if needed) |
+| Custom TCP | TCP | 8000 | Custom IP range | Key server access (only if testing directly without Nginx) |
+| HTTP | TCP | 80 | 0.0.0.0/0 | Only needed if testing key server without SSL |
+| HTTPS | TCP | 443 | 0.0.0.0/0 | Recommended for production (Nginx+SSL) |
+
+> **Note**: The recommended production setup uses Nginx with SSL, which only requires ports 22, 8022, and 443 to be open. Ports 8000 and 80 are only needed for direct testing without a proper reverse proxy setup.
 
 3. Add outbound rules:
 
@@ -163,47 +165,173 @@ This document provides detailed instructions on how to set up the M2M MCP Server
 uv run m2m-mcp-server-ssh-server --host 0.0.0.0 --run-key-server --key-server-host 0.0.0.0
 ```
 
-### Using systemd for Service Management
+## Step 6: Setting Up Nginx as a Reverse Proxy
 
-For a more robust production deployment, set up the server as a systemd service.
+Nginx allows you to expose your key server securely and handle SSL termination.
 
-## Step 6: Access and Test the Server
+1. **Install Nginx**:
+   ```bash
+   sudo apt update
+   sudo apt install nginx -y
+   ```
 
-### Basic Access
+2. **Configure firewall to allow Nginx**:
+   ```bash
+   sudo ufw allow 'Nginx HTTP'  # For initial setup
+   sudo ufw allow 'Nginx HTTPS' # For SSL (added later)
+   ```
 
-From your local machine:
+3. **Verify Nginx is running**:
+   ```bash
+   systemctl status nginx
+   ```
 
-```bash
-uv run m2m-mcp-server-ssh-client --host your-instance-public-dns --port 8022 --use-key-server
-```
+4. **Create a site configuration**:
+   ```bash
+   sudo nano /etc/nginx/sites-available/mcp-key-server
+   ```
 
-### Testing Key Management API
+5. **Add the following configuration**:
+   ```nginx
+   server {
+       listen 80;
+       listen [::]:80;
 
-```bash
-# Get server public key
-curl http://your-instance-public-dns:8000/server_pub_key
+       server_name your_domain.com;  # Replace with your actual domain name
 
-# Register a client key
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"client_pub_key": "ssh-rsa AAAA...your-public-key..."}' \
-  http://your-instance-public-dns:8000/register
+       location / {
+           proxy_pass http://127.0.0.1:8000;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
 
-# Check health
-curl http://your-instance-public-dns:8000/health
-```
+6. **Enable the site**:
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/mcp-key-server /etc/nginx/sites-enabled/
+   sudo nginx -t  # Test the configuration
+   sudo systemctl restart nginx
+   ```
 
-## Basic Security Considerations
+## Step 7: Configure systemd Service for Automatic Startup
 
-- Use a non-root user
-- Set up proper firewalls, only exposing necessary ports
-- Consider setting up HTTPS for the key server in production
-- Regularly update your system and packages
+Setting up a systemd service ensures that your server automatically starts after system reboots and is managed properly.
+
+1. **Create the systemd service file**:
+   ```bash
+   sudo nano /etc/systemd/system/mcp-ssh-server.service
+   ```
+
+2. **Add the following configuration**:
+   ```ini
+   [Unit]
+   Description=M2M MCP Server SSH Server
+   After=network.target
+
+   [Service]
+   WorkingDirectory=/home/ubuntu/m2m-mcp-server-ssh-server
+   ExecStart=/bin/bash -c 'source /home/ubuntu/.bashrc && /home/ubuntu/.local/bin/uv sync --all-extras && /home/ubuntu/.local/bin/uv run m2m-mcp-server-ssh-server --host 0.0.0.0 --run-key-server --key-server-host 0.0.0.0'
+   Environment="PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin"
+   Environment="PYTHONPATH=/home/ubuntu/m2m-mcp-server-ssh-server"
+   Restart=always
+   RestartSec=10
+   User=ubuntu
+   ProtectSystem=full
+   PrivateTmp=true
+   NoNewPrivileges=true
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+   > **Note**: Replace `/home/ubuntu` with your actual user's home directory path.
+
+3. **Enable and start the service**:
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable mcp-ssh-server.service
+   sudo systemctl start mcp-ssh-server.service
+   ```
+
+4. **Check the service status**:
+   ```bash
+   sudo systemctl status mcp-ssh-server.service
+   ```
+
+5. **View logs if needed**:
+   ```bash
+   journalctl -u mcp-ssh-server.service --follow
+   ```
+
+## Step 8: Secure with HTTPS (Recommended for Production)
+
+Adding HTTPS encryption is essential for production environments to secure the communication with your key server.
+
+1. **Install Certbot for Nginx**:
+   ```bash
+   sudo apt install certbot python3-certbot-nginx -y
+   ```
+
+2. **Obtain and install SSL certificate**:
+   ```bash
+   sudo certbot --nginx -d your_domain.com
+   ```
+   > Follow the prompts to complete the certificate setup. Certbot will automatically modify your Nginx configuration.
+
+3. **Test the certificate auto-renewal**:
+   ```bash
+   sudo certbot renew --dry-run
+   ```
+
+4. **Verify Nginx configuration**:
+   ```bash
+   sudo nginx -t
+   sudo systemctl restart nginx
+   ```
+
+5. **Verify open ports**:
+   ```bash
+   sudo apt install net-tools -y
+   sudo netstat -ntlp | grep 'nginx\|8000\|8022'
+   ```
+
+## Step 9: Testing the Connection
+
+From your local development machine, test the connection to your server:
+
+1. **Using the MCP Inspector tool**:
+   ```bash
+   # Install and run the MCP client with inspector
+   npx @modelcontextprotocol/inspector -- uv run m2m-mcp-server-ssh-client --host your_domain.com --use-key-server
+   ```
+
+2. **Testing the key server API**:
+   ```bash
+   # Test the landing page
+   curl https://your_domain.com/
+   
+   # Get the server's public key
+   curl https://your_domain.com/server_pub_key
+   
+   # Check server health
+   curl https://your_domain.com/health
+   ```
 
 ## Troubleshooting
 
-### Connection Refused
-- Check that the server is running
-- Verify firewall settings allow traffic on ports 8022 and 8000
+### Connection Issues
+- Verify firewall rules allow traffic on required ports
+- Check that both the SSH server and key server are running (systemctl status)
+- Review logs: `journalctl -u mcp-ssh-server.service`
+- Ensure Nginx is properly configured and running
 
-### Authentication Issues
-- Verify the key server is running and accessible
+### Certificate Issues
+- Run `certbot certificates` to view all installed certificates
+- Check Nginx error logs: `sudo tail -f /var/log/nginx/error.log`
+
+### Permission Issues
+- Ensure your service is running as the correct user
+- Check file ownership and permissions for SSH keys and configuration files

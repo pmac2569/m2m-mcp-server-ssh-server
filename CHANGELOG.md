@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2025-04-10
+
+### Added
+- Landing page with API documentation at root URL endpoint (/)
+- Support for HTML templates in package distribution
+
+### Improved
+- Comprehensive cloud deployment guide with Nginx, systemd, and HTTPS setup
+
 ## [0.1.0] - 2025-04-08
 
 ### Added

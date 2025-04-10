@@ -12,6 +12,7 @@ Security Note:
 # Standard library imports
 import json
 import logging
+import pathlib
 import sqlite3
 import time
 from pathlib import Path
@@ -32,7 +33,7 @@ KEY_DB_PATH = Path.home() / ".ssh" / "m2m_mcp_server_ssh_clients.db"
 class RateLimiter:
     """Simple rate limiting implementation."""
 
-    def __init__(self, max_requests: int = 5, window_seconds: int = 60):
+    def __init__(self, max_requests: int = 10, window_seconds: int = 60):
         """
         Initialize rate limiter.
 
@@ -240,8 +241,8 @@ async def start_key_server(
 
     # Create rate limiter
     rate_limiter = RateLimiter(
-        max_requests=5, window_seconds=60
-    )  # 5 requests per minute
+        max_requests=10, window_seconds=60
+    )  # 10 requests per minute
 
     # Get server public key using the shared key management function
     if server_host_key_path:
@@ -337,10 +338,27 @@ async def start_key_server(
         """Simple health check endpoint."""
         return web.json_response({"status": "healthy"})
 
+    async def landing_page(request: web.Request) -> web.Response:
+        """Serve landing page with API documentation at the root URL."""
+        # Get the package directory path
+        package_dir = pathlib.Path(__file__).parent
+        template_path = package_dir / "templates" / "index.html"
+
+        try:
+            with open(template_path, encoding="utf-8") as file:
+                html_content = file.read()
+            return web.Response(text=html_content, content_type="text/html")
+        except FileNotFoundError:
+            logger.error(f"Template file not found: {template_path}")
+            return web.Response(
+                text="Documentation unavailable", content_type="text/html", status=500
+            )
+
     # Add routes
     app.router.add_post("/register", register_client_key)
     app.router.add_get("/server_pub_key", get_server_pub_key)
     app.router.add_get("/health", health_check)
+    app.router.add_get("/", landing_page)
 
     # Start the server
     runner = web.AppRunner(app)
